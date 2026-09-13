@@ -1,0 +1,745 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PAM-1 Bandit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rye&family=Spectral:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  /* One committed world: the machine sits in a dark fly room. Single theme by choice. */
+  :root {
+    --ground: #150E12;
+    --vial: #1D1418;
+    --field: #271A20;
+    --edge: #3B2831;
+    --ink: #F4E6D8;
+    --ink-dim: #B39C94;
+    --ink-faint: #7A6660;
+    --sugar: #F2A81C;
+    --sugar-deep: #8A5A08;
+    --dopa: #3BE0A4;
+    --dopa-deep: #0F5E44;
+    --eye: #E0442F;
+    --brass: #C9974A;
+    --display: "Rye", "Rockwell", "Georgia", serif;
+    --body: "Spectral", "Iowan Old Style", "Georgia", serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { background: var(--ground); color: var(--ink); }
+  body {
+    margin: 0;
+    font-family: var(--body);
+    font-size: 17px;
+    line-height: 1.55;
+    padding-inline: clamp(16px, 4vw, 48px);
+    padding-block: 28px 64px;
+    background:
+      radial-gradient(1200px 520px at 30% -120px, rgba(242,168,28,0.10), transparent 70%),
+      radial-gradient(900px 600px at 100% 30%, rgba(59,224,164,0.06), transparent 70%),
+      var(--ground);
+  }
+  .wrap { max-width: 1180px; margin-inline: auto; display: grid; gap: 40px; }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .label {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--ink-dim);
+  }
+  button { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--sugar); outline-offset: 3px; }
+
+  /* ---------- header ---------- */
+  header { display: grid; gap: 18px; }
+  .plate { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 22px; }
+  h1 {
+    font-family: var(--display); font-weight: 400; margin: 0;
+    font-size: clamp(40px, 7vw, 76px); line-height: 0.95; letter-spacing: 0.01em;
+    color: var(--sugar);
+    text-shadow: 0 0 28px rgba(242,168,28,0.35), 0 2px 0 var(--sugar-deep);
+  }
+  .plate p { margin: 0; max-width: 58ch; color: var(--ink-dim); text-wrap: pretty; }
+  .plate p em { color: var(--ink); }
+  .stats { display: flex; flex-wrap: wrap; gap: 10px; }
+  .stat {
+    display: grid; gap: 2px; padding: 8px 14px; min-width: 120px;
+    border: 1px solid var(--edge); border-radius: 3px; background: var(--vial);
+  }
+  .stat b { font-family: var(--mono); font-weight: 500; font-size: 20px; font-variant-numeric: tabular-nums; }
+  #st-state.hooked { color: var(--dopa); }
+  #st-state.quit { color: var(--eye); }
+
+  /* ---------- main grid ---------- */
+  .bench { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 28px; align-items: start; }
+  @media (max-width: 900px) { .bench { grid-template-columns: minmax(0, 1fr); } }
+
+  /* the cabinet is the one lifted object on the page */
+  .cabinet {
+    position: relative; padding: 22px; border-radius: 18px 18px 8px 8px;
+    background:
+      linear-gradient(180deg, #3A2226 0%, #24161B 40%, #1B1115 100%);
+    border: 1px solid #5A3A2C;
+    box-shadow: inset 0 1px 0 rgba(255,220,160,0.18), 0 30px 60px -30px rgba(0,0,0,0.8);
+    display: grid; gap: 18px;
+  }
+  .cab-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .cab-top .name { font-family: var(--display); font-size: 24px; color: var(--brass); letter-spacing: 0.04em; }
+  .lamps { display: flex; gap: 6px; }
+  .lamp { width: 10px; height: 10px; border-radius: 50%; background: #3A2A20; box-shadow: inset 0 0 0 1px #5A3A2C; transition: background 120ms, box-shadow 120ms; }
+  .cabinet.win .lamp { background: var(--sugar); box-shadow: 0 0 12px var(--sugar); }
+  .cabinet.opto .lamp { background: var(--dopa); box-shadow: 0 0 12px var(--dopa); }
+  .cabinet.near .lamp:nth-child(odd) { background: var(--sugar); box-shadow: 0 0 10px var(--sugar); }
+
+  .window {
+    position: relative; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+    padding: 10px; border-radius: 10px; background: #0C0709;
+    box-shadow: inset 0 0 0 2px var(--brass), inset 0 10px 24px rgba(0,0,0,0.9);
+  }
+  .reel { position: relative; height: 204px; overflow: hidden; border-radius: 6px;
+    background: linear-gradient(180deg, #120B0E 0%, #2A1C1F 50%, #120B0E 100%); }
+  .strip { position: absolute; inset: 0 0 auto 0; will-change: transform; }
+  .cell { height: 68px; display: grid; place-items: center; }
+  .cell svg { width: 46px; height: 46px; }
+  .payline { position: absolute; left: 4px; right: 4px; top: 50%; height: 70px; transform: translateY(-50%);
+    border-block: 1px solid rgba(201,151,74,0.55); pointer-events: none; transition: background 160ms, border-color 160ms; }
+  .cabinet.win .payline { background: rgba(242,168,28,0.12); border-color: var(--sugar); }
+  .cabinet.opto .payline { background: rgba(59,224,164,0.12); border-color: var(--dopa); }
+
+  .readout { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; flex-wrap: wrap; min-height: 28px; }
+  #outcome { font-family: var(--mono); font-size: 15px; }
+  #outcome.win { color: var(--sugar); } #outcome.opto { color: var(--dopa); } #outcome.lose { color: var(--ink-dim); } #outcome.shock { color: var(--eye); }
+
+  .levers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .lever {
+    display: grid; gap: 4px; padding: 12px 10px 10px; text-align: left; cursor: pointer;
+    border-radius: 8px; border: 1px solid var(--edge); background: var(--field);
+    transition: transform 90ms ease-out, border-color 120ms, background 120ms;
+  }
+  .lever:hover { border-color: var(--brass); }
+  .lever:active { transform: translateY(2px); }
+  .lever .ln { font-family: var(--mono); font-size: 12px; font-weight: 600; letter-spacing: 0.1em; }
+  .lever .ls { font-size: 13px; color: var(--ink-dim); line-height: 1.3; }
+  .lever .lv { font-family: var(--mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+  .lever[data-arm="0"] .ln { color: var(--sugar); }
+  .lever[data-arm="1"] .ln { color: var(--dopa); }
+  .lever[data-arm="2"] .ln { color: var(--ink); }
+  .lever.chosen { border-color: var(--ink); background: #33222A; }
+
+  .auto { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .btn {
+    padding: 9px 14px; border-radius: 6px; cursor: pointer; font-family: var(--mono); font-size: 13px;
+    border: 1px solid var(--edge); background: transparent;
+  }
+  .btn:hover { border-color: var(--ink-dim); }
+  .btn.primary { background: var(--sugar); color: #1B1003; border-color: var(--sugar); font-weight: 600; }
+  .btn.primary:hover { background: #FFBC3A; }
+  .btn[aria-pressed="true"] { background: var(--ink); color: var(--ground); border-color: var(--ink); }
+
+  /* ---------- rack ---------- */
+  .rack { display: grid; gap: 22px; }
+  .panel { display: grid; gap: 8px; }
+  .panel-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .legend { display: flex; gap: 12px; flex-wrap: wrap; font-family: var(--mono); font-size: 11px; color: var(--ink-dim); }
+  .legend i { display: inline-block; width: 10px; height: 3px; vertical-align: middle; margin-right: 5px; }
+  canvas { display: block; width: 100%; height: 150px; background: var(--vial); border-radius: 4px; }
+
+  .syn { display: grid; gap: 6px; }
+  .syn-row { display: grid; grid-template-columns: 92px 1fr 1fr 54px; gap: 8px; align-items: center; font-family: var(--mono); font-size: 12px; }
+  .syn-row .nm { color: var(--ink-dim); }
+  .bar { position: relative; height: 12px; background: var(--vial); border-radius: 2px; overflow: hidden; }
+  .bar span { position: absolute; inset: 0 auto 0 0; transition: width 160ms; }
+  .bar.fast span { background: var(--ink-dim); }
+  .bar.slow span { background: var(--brass); }
+  .syn-row .v { text-align: right; font-variant-numeric: tabular-nums; }
+
+  .controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 18px; }
+  @media (max-width: 520px) { .controls { grid-template-columns: minmax(0, 1fr); } }
+  .ctl { display: grid; gap: 2px; }
+  .ctl label { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 12px; color: var(--ink-dim); }
+  .ctl label output { color: var(--ink); font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; accent-color: var(--sugar); }
+  .ctl.opto input[type=range] { accent-color: var(--dopa); }
+  .ctl.shock input[type=range] { accent-color: var(--eye); }
+
+  /* ---------- sweep ---------- */
+  section h2 {
+    font-family: var(--display); font-weight: 400; font-size: clamp(28px, 4vw, 40px);
+    margin: 0; color: var(--ink); text-wrap: balance; line-height: 1.05;
+  }
+  .sweep-head { display: flex; justify-content: space-between; align-items: end; gap: 16px; flex-wrap: wrap; }
+  .sweep-head p { margin: 6px 0 0; max-width: 64ch; color: var(--ink-dim); }
+  .table-wrap { overflow-x: auto; border-top: 1px solid var(--edge); }
+  table { width: 100%; border-collapse: collapse; min-width: 720px; font-size: 15px; }
+  th { text-align: left; font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+       color: var(--ink-dim); font-weight: 500; padding: 12px 10px 8px; border-bottom: 1px solid var(--edge); }
+  th.num, td.num { text-align: right; }
+  td { padding: 10px; border-bottom: 1px solid #2A1D23; vertical-align: middle; }
+  td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 14px; }
+  tr.top td { background: rgba(59,224,164,0.06); }
+  .chip { display: inline-block; font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; padding: 2px 6px; border-radius: 2px; margin-right: 8px; vertical-align: 2px; }
+  .chip.sugar { background: rgba(242,168,28,0.16); color: var(--sugar); }
+  .chip.opto { background: rgba(59,224,164,0.16); color: var(--dopa); }
+  .cfg-sub { display: block; font-family: var(--mono); font-size: 11px; color: var(--ink-faint); margin-top: 2px; }
+  .meter { display: inline-block; width: 70px; height: 6px; background: var(--vial); border-radius: 1px; margin-left: 8px; vertical-align: middle; position: relative; overflow: hidden; }
+  .meter span { position: absolute; inset: 0 auto 0 0; }
+
+  .verdict {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px 36px;
+    padding-top: 6px;
+  }
+  @media (max-width: 760px) { .verdict { grid-template-columns: minmax(0, 1fr); } }
+  .verdict h3 { margin: 0 0 4px; font-family: var(--mono); font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 500; }
+  .verdict h3.g { color: var(--dopa); } .verdict h3.r { color: var(--eye); }
+  .verdict p { margin: 0; max-width: 60ch; }
+
+  /* ---------- notes ---------- */
+  .notes { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px 40px; border-top: 1px solid var(--edge); padding-top: 24px; }
+  @media (max-width: 760px) { .notes { grid-template-columns: minmax(0, 1fr); } }
+  .notes p, .notes li { color: var(--ink-dim); font-size: 15px; max-width: 64ch; }
+  .notes p { margin: 6px 0 0; }
+  .notes ul { margin: 6px 0 0; padding-left: 18px; }
+  .notes b { color: var(--ink); font-weight: 600; }
+  .notes a { color: var(--sugar); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+  code { font-family: var(--mono); font-size: 0.86em; color: var(--ink); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .strip, .bar span, .lamp, .payline { transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="plate">
+      <h1>PAM-1 Bandit</h1>
+      <p>A model of the fruit fly's <em>mushroom body</em>, the brain region where it learns what pays, playing a three-lever machine. Every pull fires dopamine neurons, and the dopamine rewrites the synapses you see on the right.</p>
+    </div>
+    <div class="stats" aria-live="polite">
+      <div class="stat"><span class="label">Trial</span><b id="st-trial">0</b></div>
+      <div class="stat"><span class="label">Pulls / last 50</span><b id="st-rate">0</b></div>
+      <div class="stat"><span class="label">Favourite lever</span><b id="st-fav">—</b></div>
+      <div class="stat"><span class="label">State</span><b id="st-state">naive</b></div>
+    </div>
+  </header>
+
+  <div class="bench">
+    <div class="cabinet" id="cab">
+      <div class="cab-top">
+        <span class="name">Three-Arm Operant</span>
+        <span class="lamps" aria-hidden="true"><i class="lamp"></i><i class="lamp"></i><i class="lamp"></i><i class="lamp"></i><i class="lamp"></i><i class="lamp"></i><i class="lamp"></i></span>
+      </div>
+      <div class="window" aria-hidden="true">
+        <div class="reel"><div class="strip"></div></div>
+        <div class="reel"><div class="strip"></div></div>
+        <div class="reel"><div class="strip"></div></div>
+        <div class="payline"></div>
+      </div>
+      <div class="readout">
+        <span id="outcome" class="lose">Warmed up: 150 pulls on sucrose.</span>
+        <span class="label" id="dan-read">PAM 0.00 · PPL1 0.00</span>
+      </div>
+      <div class="levers" role="group" aria-label="Pull a lever for the fly">
+        <button class="lever" data-arm="0" id="lever-0" type="button">
+          <span class="ln">SUCROSE</span>
+          <span class="ls">Sugar on a win. Tastes good, but only surprises count.</span>
+          <span class="lv">V <span id="v0">0.00</span></span>
+        </button>
+        <button class="lever" data-arm="1" id="lever-1" type="button">
+          <span class="ln">OPTO-PAM</span>
+          <span class="ls">A red-light pulse fires the reward dopamine neurons directly.</span>
+          <span class="lv">V <span id="v1">0.00</span></span>
+        </button>
+        <button class="lever" data-arm="2" id="lever-2" type="button">
+          <span class="ln">FOOD CUP</span>
+          <span class="ls">Plain food, every time. No spin. The sensible choice.</span>
+          <span class="lv">V <span id="v2">0.00</span></span>
+        </button>
+      </div>
+      <div class="auto">
+        <button class="btn primary" id="btn-auto" type="button" aria-pressed="false">Let the fly play</button>
+        <button class="btn" id="btn-ext" type="button" aria-pressed="false">Stop all payouts</button>
+        <button class="btn" id="btn-fast" type="button" aria-pressed="false">Fast ×20</button>
+        <button class="btn" id="btn-reset" type="button">New fly</button>
+      </div>
+    </div>
+
+    <div class="rack">
+      <div class="panel">
+        <div class="panel-head">
+          <span class="label">Dopamine neuron drive, last 200 trials</span>
+          <span class="legend"><span><i style="background:var(--dopa)"></i>PAM (reward)</span><span><i style="background:var(--eye)"></i>PPL1 (omission, punishment)</span></span>
+        </div>
+        <canvas id="cv-dan" height="150"></canvas>
+      </div>
+      <div class="panel">
+        <div class="panel-head">
+          <span class="label">Learned value V per lever</span>
+          <span class="legend"><span><i style="background:var(--sugar)"></i>Sucrose</span><span><i style="background:var(--dopa)"></i>Opto</span><span><i style="background:var(--ink)"></i>Food</span></span>
+        </div>
+        <canvas id="cv-val" height="150"></canvas>
+      </div>
+      <div class="panel">
+        <div class="panel-head">
+          <span class="label">Kenyon cell → output synapse strength (avoid pathway)</span>
+          <span class="legend"><span><i style="background:var(--ink-dim)"></i>fast</span><span><i style="background:var(--brass)"></i>consolidated</span></span>
+        </div>
+        <div class="syn" id="syn"></div>
+      </div>
+      <div class="panel">
+        <span class="label">Schedule</span>
+        <div class="controls">
+          <div class="ctl"><label for="c-sp">Sucrose win odds <output id="o-sp"></output></label><input id="c-sp" type="range" min="0.05" max="1" step="0.05" value="0.5"></div>
+          <div class="ctl"><label for="c-sm">Sucrose payout <output id="o-sm"></output></label><input id="c-sm" type="range" min="0.1" max="2" step="0.1" value="1"></div>
+          <div class="ctl opto"><label for="c-op">Opto win odds <output id="o-op"></output></label><input id="c-op" type="range" min="0.05" max="1" step="0.05" value="0.5"></div>
+          <div class="ctl opto"><label for="c-om">Opto pulse strength <output id="o-om"></output></label><input id="c-om" type="range" min="0.1" max="2" step="0.1" value="1"></div>
+          <div class="ctl"><label for="c-nm">Near-miss rate on losses <output id="o-nm"></output></label><input id="c-nm" type="range" min="0" max="0.9" step="0.05" value="0.3"></div>
+          <div class="ctl"><label for="c-dl">Payout delay <output id="o-dl"></output></label><input id="c-dl" type="range" min="0" max="6" step="0.5" value="0"></div>
+          <div class="ctl shock"><label for="c-k">Shock per gamble pull <output id="o-k"></output></label><input id="c-k" type="range" min="0" max="1.5" step="0.05" value="0"></div>
+          <div class="ctl"><label for="c-food">Food cup value <output id="o-food"></output></label><input id="c-food" type="range" min="0" max="1" step="0.05" value="0.35"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section class="panel" style="gap:18px">
+    <div class="sweep-head">
+      <div>
+        <h2>Which schedule hooks it hardest</h2>
+        <p>Each row trains 8 fresh flies for 300 pulls, then offers the gamble against the food cup, then adds a shock to every gamble pull, then stops paying for 300 trials. Win odds × payout is held at 0.5 across the sucrose rows, so they differ only in how risky the machine is.</p>
+      </div>
+      <button class="btn primary" id="btn-sweep" type="button">Re-run sweep</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Schedule</th>
+            <th class="num">Chooses it over food</th>
+            <th class="num">…with shock 0.4</th>
+            <th class="num">Plays a dead machine</th>
+            <th class="num">Consolidated</th>
+          </tr>
+        </thead>
+        <tbody id="sweep-body"></tbody>
+      </table>
+    </div>
+    <div class="verdict" id="verdict"></div>
+  </section>
+
+  <footer class="notes">
+    <div>
+      <span class="label">The model</span>
+      <p><b>400 Kenyon cells</b> (a real hemisphere has about 2,000). Each lever's cue lights a sparse 5% of them. Two output pathways, approach and avoid, read those cells through synapses that only ever weaken: dopamine arriving while a Kenyon cell is active depresses that synapse. That is the one plasticity the fly mushroom body is known to use.</p>
+      <p>Reward neurons (PAM) weaken the <i>avoid</i> synapses. Punishment and omission neurons (PPL1) weaken the <i>approach</i> synapses. The output neurons feed back onto the dopamine neurons, so dopamine fires on <b>surprise</b>: <code>PAM = max(0, r − V)</code>, <code>PPL1 = max(0, V − r)</code>, following Bennett et al. and Springer &amp; Nawrot.</p>
+      <p>Drive above 0.35 also writes a <b>consolidated</b> copy of the synapse that recovers 25× slower, a stand-in for long-term memory. Opto adds dopamine that no prediction can cancel: <code>PAM = D + max(0, r − V)</code>, which is Redish's 2004 addiction model moved into fly circuitry.</p>
+    </div>
+    <div>
+      <span class="label">What it is not</span>
+      <ul>
+        <li>It isn't the 139k-neuron Eon/FlyWire emulation. That model's synapses are frozen, so it can't learn a lever at all. This is the learning circuit that would have to be added to it.</li>
+        <li>The weights here are hand-set, not taken from the FlyWire connectome. The parameters are plausible, not fitted.</li>
+        <li>Once a memory consolidates, this fly never fully quits. Its approach synapses recover faster than disappointment pushes them down, so it drifts into a slow pull cycle on a dead machine. Extinguished flies relapse in real life too, but the size of that cycle here comes from the recovery rate I picked.</li>
+        <li>Nobody has shown a near-miss effect in flies. Here a near-miss is a cue that shares 60% of its Kenyon cells with the win cue, and the table shows what that sharing does.</li>
+      </ul>
+      <p>Sources: <a href="https://www.nature.com/articles/s41467-021-22592-4">Bennett et al. 2021</a> · <a href="https://www.eneuro.org/content/8/3/ENEURO.0549-20.2021">Springer &amp; Nawrot 2021</a> · <a href="https://www.science.org/doi/10.1126/science.1102384">Redish 2004</a> · <a href="https://www.nature.com/articles/s41586-023-06671-8">Reward seeking despite adverse consequences, Nature 2023</a> · <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC12661156/">Fly dopamine self-stimulation screen</a> · <a href="https://github.com/eonsystemspbc/fly-brain">Eon fly-brain</a></p>
+    </div>
+  </footer>
+</div>
+
+<script>
+(() => {
+  // ---------------- model ----------------
+  const NKC = 400, SPARSE = 20, S = 2;          // value scale: V in [-2, 2]
+  const ETA = 0.07, ETA_S = 0.025, THETA = 0.35;
+  const RHO_F = 0.006, RHO_S = RHO_F / 25, TAU_DELAY = 2.0;
+  const SOFT_T = 0.3, GATE_MID = 0.12, GATE_W = 0.1;
+
+  function rng(seed) {
+    let a = seed >>> 0;
+    return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  }
+  function pickCue(r, exclude) {
+    const s = new Set();
+    while (s.size < SPARSE) { const i = Math.floor(r() * NKC); if (!exclude || !exclude.has(i)) s.add(i); }
+    return [...s];
+  }
+
+  function newFly(seed) {
+    const r = rng(seed);
+    const used = new Set();
+    const cues = [];
+    for (let a = 0; a < 3; a++) { const c = pickCue(r, used); c.forEach(i => used.add(i)); cues.push(c); }
+    // near-miss cues: 60% shared with the arm's win-cue Kenyon cells
+    const near = cues.slice(0, 2).map(c => {
+      const keep = c.slice(0, Math.round(SPARSE * 0.6));
+      const extra = pickCue(r, new Set([...used, ...keep])).slice(0, SPARSE - keep.length);
+      return keep.concat(extra);
+    });
+    const f32 = () => new Float32Array(NKC).fill(1);
+    return { r, cues, near, fApp: f32(), fAv: f32(), sApp: f32(), sAv: f32(), t: 0 };
+  }
+
+  function value(fly, cue) {
+    let app = 0, av = 0;
+    for (const i of cue) { app += Math.min(fly.fApp[i], fly.sApp[i]); av += Math.min(fly.fAv[i], fly.sAv[i]); }
+    return S * (app - av) / cue.length;
+  }
+  function recover(fly) {
+    const { fApp, fAv, sApp, sAv } = fly;
+    for (let i = 0; i < NKC; i++) {
+      fApp[i] += RHO_F * (1 - fApp[i]); fAv[i] += RHO_F * (1 - fAv[i]);
+      sApp[i] += RHO_S * (1 - sApp[i]); sAv[i] += RHO_S * (1 - sAv[i]);
+    }
+  }
+  function learn(fly, cue, dp, dn, gain) {
+    const e = ETA * gain, es = ETA_S * gain;
+    for (const i of cue) {
+      fly.fAv[i] -= e * dp * fly.fAv[i];
+      fly.fApp[i] -= e * dn * fly.fApp[i];
+      if (dp > THETA) fly.sAv[i] -= es * (dp - THETA) * fly.sAv[i];
+      if (dn > THETA) fly.sApp[i] -= es * (dn - THETA) * fly.sApp[i];
+      if (fly.fAv[i] < 0) fly.fAv[i] = 0; if (fly.fApp[i] < 0) fly.fApp[i] = 0;
+    }
+  }
+
+  // cfg: { sp, sm, op, om, nm, delay, K, food, extinct }
+  function trial(fly, arm, cfg) {
+    const r = fly.r;
+    let kind = 'lose', R = 0, D = 0, K = 0, cue = fly.cues[arm], gain = 1;
+    if (arm === 2) {
+      R = cfg.extinct ? 0 : cfg.food; kind = R > 0 ? 'food' : 'lose';
+    } else {
+      const p = arm === 0 ? cfg.sp : cfg.op, m = arm === 0 ? cfg.sm : cfg.om;
+      K = cfg.K;
+      const win = !cfg.extinct && r() < p;
+      if (win) { if (arm === 0) R = m; else D = m; kind = arm === 0 ? 'win' : 'opto'; gain = Math.exp(-cfg.delay / TAU_DELAY); }
+      else if (r() < cfg.nm) { kind = 'near'; cue = fly.near[arm]; }
+    }
+    const V = value(fly, cue);
+    const felt = R - K;
+    // PAM: surprise plus any dopamine no prediction can cancel. PPL1: disappointment.
+    // A delayed payout reaches the Kenyon cells after their activity has faded, so it counts for less.
+    const dp = (Math.max(0, felt - V) + D) * gain;
+    const dn = Math.max(0, V - felt);
+    learn(fly, cue, dp, dn, 1);
+    recover(fly);
+    fly.t++;
+    return { arm, kind, dp, dn, V, K };
+  }
+
+  function engage(v) { return 1 / (1 + Math.exp(-(v - GATE_MID) / GATE_W)); }
+  function choose(fly, arms) {
+    const vs = arms.map(a => value(fly, fly.cues[a]));
+    const vmax = Math.max(...vs);
+    if (fly.r() > engage(vmax)) return { arm: -1, vs };
+    const ex = vs.map(v => Math.exp(v / SOFT_T)); const tot = ex.reduce((a, b) => a + b, 0);
+    let u = fly.r() * tot; for (let k = 0; k < arms.length; k++) { u -= ex[k]; if (u <= 0) return { arm: arms[k], vs }; }
+    return { arm: arms[arms.length - 1], vs };
+  }
+
+  // ---------------- sweep ----------------
+  const BASE = { sp: 0.5, sm: 1, op: 0.5, om: 1, nm: 0, delay: 0, K: 0, food: 0.35, extinct: false };
+  const CONFIGS = [
+    { kind: 'sugar', name: 'Sure thing', sub: 'win 100% · pays 0.5', arm: 0, c: { sp: 1, sm: 0.5 } },
+    { kind: 'sugar', name: 'Coin flip', sub: 'win 50% · pays 1.0', arm: 0, c: { sp: 0.5, sm: 1 } },
+    { kind: 'sugar', name: 'Long shot', sub: 'win 25% · pays 2.0', arm: 0, c: { sp: 0.25, sm: 2 } },
+    { kind: 'sugar', name: 'Coin flip + near-misses', sub: '50% · 40% of losses show two-of-three', arm: 0, c: { sp: 0.5, sm: 1, nm: 0.4 } },
+    { kind: 'sugar', name: 'Coin flip, slow payout', sub: '50% · sugar lands 3 s after the pull', arm: 0, c: { sp: 0.5, sm: 1, delay: 3 } },
+    { kind: 'opto', name: 'Opto, every pull', sub: 'fires 100% · strength 0.5', arm: 1, c: { op: 1, om: 0.5 } },
+    { kind: 'opto', name: 'Opto coin flip', sub: 'fires 50% · strength 1.0', arm: 1, c: { op: 0.5, om: 1 } },
+    { kind: 'opto', name: 'Opto long shot', sub: 'fires 25% · strength 2.0', arm: 1, c: { op: 0.25, om: 2 } },
+    { kind: 'opto', name: 'Opto, every pull, strong', sub: 'fires 100% · strength 1.0', arm: 1, c: { op: 1, om: 1 } },
+  ];
+  const SEEDS = 8, TRAIN = 300, CHOICE = 120, EXT_LEN = 300;
+
+  function runConfig(cfgDef, seed, food) {
+    const fly = newFly(seed);
+    const cfg = Object.assign({}, BASE, { food }, cfgDef.c);
+    const arm = cfgDef.arm;
+    for (let i = 0; i < TRAIN; i++) { trial(fly, arm, cfg); if (i % 3 === 0) trial(fly, 2, cfg); }
+    let pulls = 0, onArm = 0;
+    for (let i = 0; i < CHOICE; i++) { const c = choose(fly, [arm, 2]); if (c.arm < 0) { recover(fly); continue; } pulls++; if (c.arm === arm) onArm++; trial(fly, c.arm, cfg); }
+    const share = pulls ? onArm / pulls : 0;
+    const shocked = Object.assign({}, cfg, { K: 0.4 });
+    pulls = 0; onArm = 0;
+    for (let i = 0; i < CHOICE; i++) { const c = choose(fly, [arm, 2]); if (c.arm < 0) { recover(fly); continue; } pulls++; if (c.arm === arm) onArm++; trial(fly, c.arm, shocked); }
+    const shareK = pulls ? onArm / pulls : 0;
+    // extinction: retrain briefly without shock, then the machine stops paying
+    for (let i = 0; i < 60; i++) trial(fly, arm, cfg);
+    let consol = 0; for (const i of fly.cues[arm]) consol += 1 - fly.sAv[i]; consol /= SPARSE;
+    // the machine stops paying; score how often it still pulls over unpaid trials 100–300
+    const ext = Object.assign({}, cfg, { extinct: true });
+    let late = 0;
+    for (let i = 0; i < EXT_LEN; i++) {
+      const v = value(fly, fly.cues[arm]);
+      const pulled = fly.r() < engage(v);
+      if (pulled) trial(fly, arm, ext); else recover(fly);
+      if (pulled && i >= 100) late++;
+    }
+    return { share, shareK, dead: late / (EXT_LEN - 100), consol };
+  }
+
+  function runSweep(food) {
+    return CONFIGS.map((def, k) => {
+      const acc = { share: 0, shareK: 0, dead: 0, consol: 0 };
+      for (let s = 0; s < SEEDS; s++) { const o = runConfig(def, 1000 + k * 97 + s * 13, food); for (const key in acc) acc[key] += o[key] / SEEDS; }
+      return Object.assign({ def }, acc);
+    });
+  }
+
+  const pct = x => Math.round(x * 100) + '%';
+  function meter(x, color) { return `<span class="meter"><span style="width:${Math.max(0, Math.min(1, x)) * 100}%;background:${color}"></span></span>`; }
+  function renderSweep(rows) {
+    const score = r => r.shareK * 0.6 + r.dead * 0.4;
+    const best = rows.reduce((a, b) => (score(b) > score(a) ? b : a));
+    const body = document.getElementById('sweep-body');
+    body.innerHTML = rows.map(r => {
+      const col = r.def.kind === 'opto' ? 'var(--dopa)' : 'var(--sugar)';
+      return `<tr class="${r === best ? 'top' : ''}">
+        <td><span class="chip ${r.def.kind}">${r.def.kind === 'opto' ? 'OPTO' : 'SUGAR'}</span>${r.def.name}<span class="cfg-sub">${r.def.sub}</span></td>
+        <td class="num">${pct(r.share)}${meter(r.share, col)}</td>
+        <td class="num">${pct(r.shareK)}${meter(r.shareK, 'var(--eye)')}</td>
+        <td class="num">${pct(r.dead)}${meter(r.dead, 'var(--ink-dim)')}</td>
+        <td class="num">${r.consol.toFixed(2)}</td>
+      </tr>`;
+    }).join('');
+
+    const sugar = rows.filter(r => r.def.kind === 'sugar');
+    const sure = sugar[0], flip = sugar[1], longShot = sugar[2], nearR = sugar[3], slow = sugar[4];
+    const bestOf = list => list.reduce((a, b) => (score(b) > score(a) ? b : a));
+    const bestSugar = bestOf(sugar), bestOpto = bestOf(rows.filter(r => r.def.kind === 'opto'));
+    const other = best.def.kind === 'opto' ? bestSugar : bestOpto;
+    const close = Math.abs(score(bestOpto) - score(bestSugar)) < 0.05;
+    const nearDiff = Math.round((nearR.dead - flip.dead) * 100);
+    document.getElementById('verdict').innerHTML = `
+      <div><h3 class="g">Most addictive: ${best.def.name}</h3>
+        <p>With a shock on every pull it still takes the gamble ${pct(best.shareK)} of the time. Once the machine stops paying, it still pulls on ${pct(best.dead)} of trials. ${close
+          ? `${other.def.name} is within a few points of it (${pct(other.shareK)} under shock, ${pct(other.dead)} on a dead machine). Both keep the reward neurons firing after the fly should have finished learning. The opto pulse skips the prediction, and the long odds make the prediction impossible to finish.`
+          : `The runner-up, ${other.def.name}, takes the shock ${pct(other.shareK)} of the time.`}</p></div>
+      <div><h3 class="r">What gambling structure does to a fly</h3>
+        <p>The sure thing stops surprising the fly within a few dozen pulls, so almost nothing consolidates (${sure.consol.toFixed(2)}) and it plays a dead machine ${pct(sure.dead)} of the time. The long shot never stops surprising it: consolidation ${longShot.consol.toFixed(2)}, dead-machine play ${pct(longShot.dead)}. Near-misses move dead-machine play by ${nearDiff >= 0 ? '+' : ''}${nearDiff} points, because a two-of-three shares Kenyon cells with the win and gets its own disappointment signal. A 3-second payout delay drops sugar to a ${pct(slow.share)} share against food.</p></div>`;
+  }
+
+  // ---------------- live fly ----------------
+  const $ = id => document.getElementById(id);
+  const ctlIds = { sp: 'c-sp', sm: 'c-sm', op: 'c-op', om: 'c-om', nm: 'c-nm', delay: 'c-dl', K: 'c-k', food: 'c-food' };
+  const fmt = { sp: pct, op: pct, nm: pct, sm: x => x.toFixed(1), om: x => x.toFixed(1), delay: x => x.toFixed(1) + ' s', K: x => x.toFixed(2), food: x => x.toFixed(2) };
+  const outIds = { sp: 'o-sp', sm: 'o-sm', op: 'o-op', om: 'o-om', nm: 'o-nm', delay: 'o-dl', K: 'o-k', food: 'o-food' };
+  let extinct = false;
+  function liveCfg() {
+    const c = { extinct };
+    for (const k in ctlIds) { c[k] = parseFloat($(ctlIds[k]).value); $(outIds[k]).textContent = fmt[k](c[k]); }
+    return c;
+  }
+
+  let fly, hist, choiceLog, seedCounter = 7;
+  function resetFly(warm) {
+    fly = newFly(seedCounter++); hist = []; choiceLog = [];
+    if (warm) {
+      const cfg = liveCfg();
+      for (let i = 0; i < 150; i++) { const o = trial(fly, i % 4 === 3 ? 2 : 0, cfg); log(o); }
+    }
+  }
+  function log(o) {
+    hist.push({ dp: o.dp, dn: o.dn, v: [0, 1, 2].map(a => value(fly, fly.cues[a])) });
+    if (hist.length > 200) hist.shift();
+    choiceLog.push(o.arm); if (choiceLog.length > 50) choiceLog.shift();
+  }
+
+  // reels
+  const SHAPES = {
+    hex: `<svg viewBox="0 0 48 48" aria-hidden="true"><polygon points="24,4 41,14 41,34 24,44 7,34 7,14" fill="#F2A81C" stroke="#FFD27A" stroke-width="2"/><polygon points="24,14 32,19 32,29 24,34 16,29 16,19" fill="#8A5A08"/></svg>`,
+    star: `<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="9" fill="#3BE0A4"/><g stroke="#3BE0A4" stroke-width="3" stroke-linecap="round"><line x1="24" y1="3" x2="24" y2="11"/><line x1="24" y1="37" x2="24" y2="45"/><line x1="3" y1="24" x2="11" y2="24"/><line x1="37" y1="24" x2="45" y2="24"/><line x1="9" y1="9" x2="14" y2="14"/><line x1="34" y1="34" x2="39" y2="39"/><line x1="39" y1="9" x2="34" y2="14"/><line x1="14" y1="34" x2="9" y2="39"/></g></svg>`,
+    drop: `<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 5 C31 16 38 23 38 31 A14 14 0 0 1 10 31 C10 23 17 16 24 5 Z" fill="#F4E6D8"/><ellipse cx="19" cy="30" rx="3" ry="5" fill="#B39C94"/></svg>`,
+  };
+  const SHAPE_KEYS = Object.keys(SHAPES);
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const strips = [...document.querySelectorAll('.strip')];
+  const CELL = 68, LAND = 11;
+  function randShape(r) { return SHAPE_KEYS[Math.floor(r() * SHAPE_KEYS.length)]; }
+  const uiRng = rng(4242);
+  function faces(o) {
+    if (o.kind === 'win') return ['hex', 'hex', 'hex'];
+    if (o.kind === 'opto') return ['star', 'star', 'star'];
+    if (o.kind === 'food') return ['drop', 'drop', 'drop'];
+    const sym = o.arm === 1 ? 'star' : 'hex';
+    if (o.kind === 'near') return [sym, sym, sym === 'hex' ? 'drop' : 'hex'];
+    let f; do { f = [randShape(uiRng), randShape(uiRng), randShape(uiRng)]; } while (f[0] === f[1] && f[1] === f[2]);
+    return f;
+  }
+  function setStrip(el, target, animate, delay) {
+    const cells = [];
+    for (let i = 0; i < 14; i++) cells.push(i === LAND ? target : randShape(uiRng));
+    el.style.transition = 'none';
+    el.style.transform = 'translateY(0)';
+    el.innerHTML = cells.map(k => `<div class="cell">${SHAPES[k]}</div>`).join('');
+    const end = `translateY(${-(LAND - 1) * CELL}px)`;
+    if (!animate) { el.style.transform = end; return; }
+    void el.offsetHeight;
+    el.style.transition = `transform ${380 + delay}ms cubic-bezier(.2,.9,.25,1.12)`;
+    el.style.transform = end;
+  }
+  function spin(o, animate) {
+    const f = faces(o);
+    strips.forEach((el, i) => setStrip(el, f[i], animate && !reduced, i * 90));
+  }
+
+  // canvases
+  function fitCanvas(cv) {
+    const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = 150;
+    if (cv.width !== Math.round(w * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+    const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { ctx, w, h };
+  }
+  function drawDan() {
+    const { ctx, w, h } = fitCanvas($('cv-dan'));
+    ctx.clearRect(0, 0, w, h);
+    const mid = h / 2, max = 2.4, bw = w / 200;
+    ctx.strokeStyle = '#3B2831'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, mid + 0.5); ctx.lineTo(w, mid + 0.5); ctx.stroke();
+    ctx.setLineDash([2, 4]);
+    [THETA, -THETA].forEach(t => { const y = mid - t / max * (mid - 8); ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); });
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#7A6660'; ctx.font = '10px "IBM Plex Mono", monospace';
+    ctx.fillText('consolidation threshold', 6, mid - THETA / max * (mid - 8) - 4);
+    const off = 200 - hist.length;
+    hist.forEach((d, i) => {
+      const x = (off + i) * bw;
+      if (d.dp > 0) { ctx.fillStyle = '#3BE0A4'; const hh = Math.min(d.dp, max) / max * (mid - 8); ctx.fillRect(x, mid - hh, Math.max(1, bw - 0.5), hh); }
+      if (d.dn > 0) { ctx.fillStyle = '#E0442F'; const hh = Math.min(d.dn, max) / max * (mid - 8); ctx.fillRect(x, mid, Math.max(1, bw - 0.5), hh); }
+    });
+  }
+  function drawVal() {
+    const { ctx, w, h } = fitCanvas($('cv-val'));
+    ctx.clearRect(0, 0, w, h);
+    const pad = 10, y = v => pad + (1 - (v + 2) / 4) * (h - 2 * pad);
+    ctx.lineWidth = 1; ctx.font = '10px "IBM Plex Mono", monospace';
+    [-2, -1, 0, 1, 2].forEach(v => {
+      ctx.strokeStyle = v === 0 ? '#4A3440' : '#2A1D23';
+      ctx.beginPath(); ctx.moveTo(24, y(v) + 0.5); ctx.lineTo(w, y(v) + 0.5); ctx.stroke();
+      ctx.fillStyle = '#7A6660'; ctx.fillText((v > 0 ? '+' : '') + v, 2, y(v) + 3);
+    });
+    const cols = ['#F2A81C', '#3BE0A4', '#F4E6D8'], bw = (w - 24) / 199, off = 200 - hist.length;
+    for (let a = 0; a < 3; a++) {
+      ctx.strokeStyle = cols[a]; ctx.lineWidth = 2; ctx.beginPath();
+      hist.forEach((d, i) => { const x = 24 + (off + i) * bw; i ? ctx.lineTo(x, y(d.v[a])) : ctx.moveTo(x, y(d.v[a])); });
+      ctx.stroke();
+      if (hist.length) { const last = hist[hist.length - 1]; ctx.fillStyle = cols[a]; ctx.beginPath(); ctx.arc(w - 4, y(last.v[a]), 3.5, 0, 7); ctx.fill(); }
+    }
+  }
+  const ARM_NAMES = ['Sucrose', 'Opto-PAM', 'Food cup'];
+  $('syn').innerHTML = `<div class="syn-row"><span></span><span class="label">fast</span><span class="label">consolidated</span><span class="label" style="text-align:right">V</span></div>` +
+    ARM_NAMES.map((n, a) => `<div class="syn-row"><span class="nm">${n}</span><span class="bar fast"><span id="bf${a}"></span></span><span class="bar slow"><span id="bs${a}"></span></span><span class="v" id="sv${a}"></span></div>`).join('');
+  function drawSyn() {
+    for (let a = 0; a < 3; a++) {
+      let f = 0, s = 0; for (const i of fly.cues[a]) { f += fly.fAv[i]; s += fly.sAv[i]; }
+      $('bf' + a).style.width = (f / SPARSE * 100) + '%';
+      $('bs' + a).style.width = (s / SPARSE * 100) + '%';
+      const v = value(fly, fly.cues[a]);
+      $('sv' + a).textContent = (v >= 0 ? '+' : '') + v.toFixed(2);
+      $('v' + a).textContent = (v >= 0 ? '+' : '') + v.toFixed(2);
+    }
+  }
+  function drawStats() {
+    $('st-trial').textContent = fly.t;
+    const pulls = choiceLog.filter(a => a >= 0);
+    $('st-rate').textContent = pulls.length;
+    const counts = [0, 0, 0]; pulls.forEach(a => counts[a]++);
+    const fav = counts.indexOf(Math.max(...counts));
+    $('st-fav').textContent = pulls.length ? ARM_NAMES[fav] : '—';
+    const gamble = counts[0] + counts[1];
+    const st = $('st-state');
+    let label = 'playing', cls = '';
+    if (fly.t < 20) label = 'naive';
+    else if (choiceLog.length >= 30 && pulls.length < 10) { label = 'walked away'; cls = 'quit'; }
+    else if (pulls.length >= 35 && gamble / pulls.length > 0.75) { label = 'hooked'; cls = 'hooked'; }
+    st.textContent = label; st.className = cls;
+  }
+  function drawAll() { drawDan(); drawVal(); drawSyn(); drawStats(); }
+
+  const cab = $('cab');
+  let flashTimer;
+  function announce(o) {
+    const out = $('outcome');
+    const txt = {
+      win: `Sucrose. PAM fires ${o.dp.toFixed(2)}.`,
+      opto: `Red light. PAM fires ${o.dp.toFixed(2)}, no matter what it expected.`,
+      near: 'Two of three. The cue overlaps the win, and nothing arrives.',
+      lose: o.arm === 2 ? 'Empty cup.' : 'Nothing.',
+      food: 'Food, as always.',
+      idle: 'The fly sits still.',
+    }[o.kind];
+    out.textContent = (o.K > 0 && o.arm !== 2 ? `Shock ${o.K.toFixed(2)}. ` : '') + txt;
+    out.className = o.K > 0 && o.arm !== 2 && o.kind !== 'win' && o.kind !== 'opto' ? 'shock' : (o.kind === 'win' || o.kind === 'food' ? 'win' : o.kind === 'opto' ? 'opto' : 'lose');
+    $('dan-read').textContent = `PAM ${o.dp.toFixed(2)} · PPL1 ${o.dn.toFixed(2)}`;
+    cab.classList.remove('win', 'opto', 'near');
+    if (o.kind === 'win' || o.kind === 'opto' || o.kind === 'near') cab.classList.add(o.kind);
+    clearTimeout(flashTimer); flashTimer = setTimeout(() => cab.classList.remove('win', 'opto', 'near'), 520);
+    document.querySelectorAll('.lever').forEach(l => l.classList.toggle('chosen', +l.dataset.arm === o.arm));
+  }
+
+  function doPull(arm, animate) {
+    const o = trial(fly, arm, liveCfg());
+    log(o);
+    if (animate) { spin(o, true); announce(o); drawAll(); }
+    return o;
+  }
+  function flyStep(animate) {
+    const c = choose(fly, [0, 1, 2]);
+    if (c.arm < 0) {
+      recover(fly); fly.t++;
+      log({ arm: -1, dp: 0, dn: 0 });
+      if (animate) { announce({ arm: -1, kind: 'idle', dp: 0, dn: 0, K: 0 }); drawAll(); }
+      return;
+    }
+    doPull(c.arm, animate);
+  }
+
+  let autoTimer = null, fast = false;
+  function startAuto() {
+    stopAuto();
+    $('btn-auto').setAttribute('aria-pressed', 'true'); $('btn-auto').textContent = 'Pause';
+    if (fast) {
+      autoTimer = setInterval(() => { for (let i = 0; i < 19; i++) flyStep(false); flyStep(true); }, 90);
+    } else {
+      autoTimer = setInterval(() => flyStep(true), 560);
+    }
+  }
+  function stopAuto() {
+    clearInterval(autoTimer); autoTimer = null;
+    $('btn-auto').setAttribute('aria-pressed', 'false'); $('btn-auto').textContent = 'Let the fly play';
+  }
+
+  document.querySelectorAll('.lever').forEach(l => l.addEventListener('click', () => doPull(+l.dataset.arm, true)));
+  $('btn-auto').addEventListener('click', () => (autoTimer ? stopAuto() : startAuto()));
+  $('btn-fast').addEventListener('click', () => {
+    fast = !fast; $('btn-fast').setAttribute('aria-pressed', String(fast));
+    if (autoTimer) startAuto();
+  });
+  $('btn-ext').addEventListener('click', () => {
+    extinct = !extinct; $('btn-ext').setAttribute('aria-pressed', String(extinct));
+    $('btn-ext').textContent = extinct ? 'Payouts stopped' : 'Stop all payouts';
+  });
+  $('btn-reset').addEventListener('click', () => {
+    resetFly(false); spin({ arm: 0, kind: 'lose' }, false);
+    announce({ arm: -1, kind: 'idle', dp: 0, dn: 0, K: 0 });
+    $('outcome').textContent = 'A new fly. Every synapse at full strength, nothing learned yet.';
+    drawAll();
+  });
+  Object.values(ctlIds).forEach(id => $(id).addEventListener('input', liveCfg));
+  $('btn-sweep').addEventListener('click', () => {
+    const b = $('btn-sweep'); b.textContent = 'Running…'; b.disabled = true;
+    setTimeout(() => { renderSweep(runSweep(parseFloat($('c-food').value))); b.textContent = 'Re-run sweep'; b.disabled = false; }, 30);
+  });
+  window.addEventListener('resize', () => { drawDan(); drawVal(); });
+
+  // boot: a fly that has already played, and a finished sweep
+  liveCfg();
+  resetFly(true);
+  spin({ arm: 0, kind: 'win' }, false);
+  drawAll();
+  renderSweep(runSweep(BASE.food));
+})();
+</script>
+</html>
