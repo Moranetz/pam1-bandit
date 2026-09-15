@@ -329,7 +329,7 @@
   <footer class="notes">
     <div>
       <span class="label">The model</span>
-      <p><b>400 Kenyon cells</b> (a real hemisphere has about 2,000). Each lever's cue lights a sparse 5% of them. Two output pathways, approach and avoid, read those cells through synapses that only ever weaken: dopamine arriving while a Kenyon cell is active depresses that synapse. That is the one plasticity the fly mushroom body is known to use.</p>
+      <p><b>400 Kenyon cells</b> (FlyWire counts about 2,600 per hemisphere). Each lever's cue lights a sparse 5% of them. Two output pathways, approach and avoid, read those cells through synapses that only ever weaken: dopamine arriving while a Kenyon cell is active depresses that synapse. That is the one plasticity the fly mushroom body is known to use.</p>
       <p>Reward neurons (PAM) weaken the <i>avoid</i> synapses. Punishment and omission neurons (PPL1) weaken the <i>approach</i> synapses. The output neurons feed back onto the dopamine neurons, so dopamine fires on <b>surprise</b>: <code>PAM = max(0, r − V)</code>, <code>PPL1 = max(0, V − r)</code>, following Bennett et al. and Springer &amp; Nawrot.</p>
       <p>Drive above 0.35 also writes a <b>consolidated</b> copy of the synapse that recovers 25× slower, a stand-in for long-term memory. Opto adds dopamine that no prediction can cancel: <code>PAM = D + max(0, r − V)</code>, which is Redish's 2004 addiction model moved into fly circuitry.</p>
     </div>

@@ -32,9 +32,13 @@ The page runs the full sweep of 9 schedules on load, and every slider feeds the 
 ## Limits
 
 - Weights are hand-set. None come from the FlyWire connectome, and the parameters are plausible without being fitted to data.
-- A real fly has about 2,000 Kenyon cells per hemisphere. This model has 400.
+- FlyWire counts 2,597 Kenyon cells in the right hemisphere and 2,580 in the left. This model has 400.
 - Nobody has shown a near-miss effect in flies. Here a near-miss is a cue that shares 60% of its Kenyon cells with the win cue.
 - Consolidated memories never fully extinguish in this model. The size of the leftover pull cycle on an unpaid machine depends on a recovery rate I picked.
+
+## Next: the full brain
+
+[FULL-BRAIN.md](FULL-BRAIN.md) is the plan for running this game on the 139,000-neuron FlyWire brain model with learning added. It has the setup commands, the cell selectors, a plasticity sketch, the traps and the compute budget.
 
 ## Run it
 
